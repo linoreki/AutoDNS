@@ -88,6 +88,7 @@ configure_dns_records() {
 # Instalador de BIND9
 install_bind9() {
     read -p "Ingrese el dominio (ej: midominio.com): " DOMAIN
+    read -p "Ingrese el hostname del servidor: " HOSTNAME
     read -p "Ingrese la IP del servidor DNS: " DNS_IP
     read -p "Ingrese la red inversa (ej: 1.168.192): " REVERSE_NET
 
@@ -95,22 +96,6 @@ install_bind9() {
     apt update && apt install -y bind9 bind9-utils bind9-doc || error_exit "Fallo al instalar BIND9."
     
     echo -e "${YELLOW}Configurando BIND9...${NC}"
-    backup_file "/etc/bind/named.conf.options"
-    cat > /etc/bind/named.conf.options <<EOL
-options {
-    directory "/var/cache/bind";
-    recursion yes;
-    allow-recursion { ${REVERSE_NET}.0/24; };
-    listen-on { any; };
-    allow-query { any; };
-    forwarders {
-        8.8.8.8;
-        8.8.4.4;
-    };
-    dnssec-validation auto;
-};
-EOL
-
     backup_file "/etc/bind/named.conf.local"
     cat > /etc/bind/named.conf.local <<EOL
 zone "${DOMAIN}" {
@@ -123,6 +108,37 @@ zone "${REVERSE_NET}.in-addr.arpa" {
     file "/etc/bind/db.${REVERSE_NET}";
 };
 EOL
+
+    backup_file "/etc/bind/db.${DOMAIN}"
+    cat > /etc/bind/db.${DOMAIN} <<EOL
+\$TTL 604800
+@   IN  SOA ${HOSTNAME}.${DOMAIN}. root.${DOMAIN}. (
+        2025011601 ; Serial
+        604800     ; Refresh
+        86400      ; Retry
+        2419200    ; Expire
+        604800 )   ; Negative Cache TTL
+
+@       IN  NS      ${HOSTNAME}.${DOMAIN}.
+${HOSTNAME}    IN  A       ${DNS_IP}
+EOL
+
+    backup_file "/etc/bind/db.${REVERSE_NET}"
+    cat > /etc/bind/db.${REVERSE_NET} <<EOL
+\$TTL 604800
+@   IN  SOA ${HOSTNAME}.${DOMAIN}. root.${DOMAIN}. (
+        2025011601 ; Serial
+        604800     ; Refresh
+        86400      ; Retry
+        2419200    ; Expire
+        604800 )   ; Negative Cache TTL
+
+@       IN  NS      ${HOSTNAME}.${DOMAIN}.
+$(echo ${DNS_IP} | awk -F. '{print $4}')      IN  PTR     ${HOSTNAME}.${DOMAIN}.
+EOL
+
+    named-checkzone ${DOMAIN} /etc/bind/db.${DOMAIN} || error_exit "Error en la configuración del archivo de zona directa"
+    named-checkzone ${REVERSE_NET}.in-addr.arpa /etc/bind/db.${REVERSE_NET} || error_exit "Error en la configuración del archivo de zona inversa"
 
     systemctl restart bind9 && systemctl enable bind9 || error_exit "Fallo al reiniciar BIND9."
     echo -e "${GREEN}BIND9 instalado y configurado correctamente.${NC}"
