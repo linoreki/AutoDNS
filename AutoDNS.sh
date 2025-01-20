@@ -3,7 +3,7 @@
 # ===============================
 # Instalador Automático de BIND9
 # ===============================
-# Autor: ChatGPT
+# Autor: Linoreki
 # Descripción: Script interactivo para instalar y configurar BIND9 en Ubuntu Server
 
 # Colores para la terminal
